@@ -1,16 +1,10 @@
-import {GL} from './GL.js';
-
+import { GL } from './GL.js';
 export class Texture {
-    private gl = GL.instance;
-    private textrue?: WebGLTexture | null;
-    private image?: HTMLImageElement;
-    private imageSource: string;
-
-    public constructor(imgSource: string) {
+    constructor(imgSource) {
+        this.gl = GL.instance;
         this.imageSource = imgSource;
     }
-
-    private init(): void {
+    init() {
         if (this.imageSource) {
             this.textrue = this.gl.createTexture();
             this.image = new Image();
@@ -19,8 +13,7 @@ export class Texture {
         }
         throw new Error("Fail to initialize texture.");
     }
-
-    public create(): void {
+    create() {
         this.init();
         if (this.textrue && this.image) {
             this.gl.bindTexture(this.gl.TEXTURE_2D, this.textrue);
@@ -34,3 +27,4 @@ export class Texture {
         throw new Error("Fail to create texture.");
     }
 }
+//# sourceMappingURL=Texture.js.map

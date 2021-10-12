@@ -1,18 +1,12 @@
-import {GL} from './GL.js';
-
+import { GL } from './GL.js';
 export class Buffer {
-    private gl: WebGL2RenderingContext = GL.instance;
-    private buffer?: WebGLBuffer;
-    private bufferType: number;
-    private drawHint: number;
-
-    public constructor(bufferType: number, drawHint: number = GL.instance.DYNAMIC_DRAW) {
+    constructor(bufferType, drawHint = GL.instance.DYNAMIC_DRAW) {
+        this.gl = GL.instance;
         this.bufferType = bufferType;
         this.drawHint = drawHint;
         this.create();
     }
-
-    public create(): void {
+    create() {
         let _buf = this.gl.createBuffer();
         if (_buf) {
             this.buffer = _buf;
@@ -20,16 +14,14 @@ export class Buffer {
         }
         throw new Error("Fail to create the GLBuffer.");
     }
-
-    public release(): void {
+    release() {
         if (this.buffer) {
             this.gl.deleteBuffer(this.buffer);
             return;
         }
         console.log("Fail to release the buffer. the buffer is null.");
     }
-
-    public upload(data: Float32Array): void {
+    upload(data) {
         if (this.buffer && data) {
             this.gl.bindBuffer(this.bufferType, this.buffer);
             this.gl.bufferData(this.bufferType, data, this.drawHint);
@@ -37,29 +29,26 @@ export class Buffer {
         }
         throw new Error("Fail to upload data to GPU.");
     }
-
-    public unbind(): void {
+    unbind() {
         this.gl.bindBuffer(this.bufferType, null);
         return;
     }
-
-    public bindBaseWithName(program: WebGLProgram, name: string): void {
+    bindBaseWithName(program, name) {
         if (this.buffer) {
             this.gl.bindBufferBase(this.bufferType, this.getIndex(program, name), this.buffer);
             return;
         }
         throw new Error("Fail to bind buffer base.");
     }
-
-    public bindBase(program: WebGLProgram, index: number): void {
+    bindBase(program, index) {
         if (this.buffer) {
             this.gl.bindBufferBase(this.bufferType, index, this.buffer);
             return;
         }
         throw new Error("Fail to bind buffer base.");
     }
-
-    private getIndex(program: WebGLProgram, name: string): number {
+    getIndex(program, name) {
         return this.gl.getUniformBlockIndex(program, name);
     }
 }
+//# sourceMappingURL=Buffer.js.map

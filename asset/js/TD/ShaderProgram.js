@@ -1,33 +1,24 @@
-import {GL} from './GL.js';
-import {Shader} from './Shader.js';
-
+import { GL } from './GL.js';
 export class ShaderProgram {
-    private gl: WebGLRenderingContext = GL.instance;
-    private name: string;
-    private program?: WebGLProgram;
-    private shaders?: Shader[] | null;
-
-    public constructor(name: string) {
+    constructor(name) {
+        this.gl = GL.instance;
         this.name = name;
     }
-
-    private attach(shader: WebGLShader): void {
+    attach(shader) {
         if (this.program) {
             this.gl.attachShader(this.program, shader);
             return;
         }
         throw new Error("Fail to attach shader.");
     }
-
-    private link(): void {
+    link() {
         if (this.program) {
             this.gl.linkProgram(this.program);
             return;
         }
         throw new Error("Fail to link program.");
     }
-
-    private init(): void {
+    init() {
         let _prog = this.gl.createProgram();
         if (_prog) {
             this.program = _prog;
@@ -35,11 +26,9 @@ export class ShaderProgram {
         }
         throw new Error("Fail to initialize shader program.");
     }
-
-    public getShaderProgram(...shaders: Shader[]): WebGLProgram {
+    getShaderProgram(...shaders) {
         this.init();
         this.shaders = shaders;
-
         for (let i = 0; i < shaders.length; i++) {
             let shader = shaders[i];
             let gl_shader = shader.create();
@@ -47,25 +36,20 @@ export class ShaderProgram {
                 this.attach(gl_shader);
             }
         }
-
         this.link();
-
         if (this.program) {
             return this.program;
         }
-
         throw new Error("Fail to get ShaderProgam " + this.name + ".");
     }
-
-    public use() {
+    use() {
         if (this.program) {
             this.gl.useProgram(this.program);
-            return
+            return;
         }
         throw new Error("Fail to use ShaderProgam " + this.name + ".");
     }
-
-    public setAttribute(attributeName: string): number {
+    setAttribute(attributeName) {
         if (this.program) {
             let vertexPositionAttribute = this.gl.getAttribLocation(this.program, attributeName);
             this.gl.enableVertexAttribArray(vertexPositionAttribute);
@@ -73,8 +57,7 @@ export class ShaderProgram {
         }
         throw new Error("Fail to set " + attributeName);
     }
-
-    public cleanUp(): void {
+    cleanUp() {
         if (this.shaders && this.shaders.length != 0 && this.program) {
             for (let i = 0; i < this.shaders.length; i++) {
                 this.gl.detachShader(this.program, this.shaders[i]);
@@ -85,8 +68,7 @@ export class ShaderProgram {
         }
         console.log("It looks like the ShaderProgram " + this.name + " has already been cleaned up.");
     }
-
-    public delete(): void {
+    delete() {
         if (this.program) {
             this.cleanUp();
             this.gl.deleteProgram(this.program);
@@ -96,3 +78,4 @@ export class ShaderProgram {
         return;
     }
 }
+//# sourceMappingURL=ShaderProgram.js.map
