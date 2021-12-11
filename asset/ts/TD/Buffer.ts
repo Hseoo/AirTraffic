@@ -5,6 +5,7 @@ export class Buffer {
     private buffer?: WebGLBuffer;
     private bufferType: number;
     private drawHint: number;
+    private lastLength: number = 0;
 
     public constructor(bufferType: number, drawHint: number = GL.instance.DYNAMIC_DRAW) {
         this.bufferType = bufferType;
@@ -12,7 +13,7 @@ export class Buffer {
         this.create();
     }
 
-    public create(): void {
+    private create(): void {
         let _buf = this.gl.createBuffer();
         if (_buf) {
             this.buffer = _buf;
@@ -33,9 +34,28 @@ export class Buffer {
         if (this.buffer && data) {
             this.gl.bindBuffer(this.bufferType, this.buffer);
             this.gl.bufferData(this.bufferType, data, this.drawHint);
+            this.lastLength = data.length;
             return;
         }
         throw new Error("Fail to upload data to GPU.");
+    }
+
+    public uploadUShort(data: Uint16Array): void {
+        if (this.buffer && data) {
+            this.gl.bindBuffer(this.bufferType, this.buffer);
+            this.gl.bufferData(this.bufferType, data, this.drawHint);
+            this.lastLength = data.length;
+            return;
+        }
+        throw new Error("Fail to upload data to GPU.");
+    }
+
+    public bind(): void {
+        if (this.buffer) {
+            this.gl.bindBuffer(this.bufferType, this.buffer);
+            return;
+        }
+        throw new Error("Fail to bind buffer.");
     }
 
     public unbind(): void {
@@ -43,6 +63,10 @@ export class Buffer {
         return;
     }
 
+    public get length() {
+        return this.lastLength;
+    }
+    /*
     public bindBaseWithName(program: WebGLProgram, name: string): void {
         if (this.buffer) {
             this.gl.bindBufferBase(this.bufferType, this.getIndex(program, name), this.buffer);
@@ -62,4 +86,5 @@ export class Buffer {
     private getIndex(program: WebGLProgram, name: string): number {
         return this.gl.getUniformBlockIndex(program, name);
     }
+    */
 }

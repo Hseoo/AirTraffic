@@ -1,38 +1,247 @@
 <!DOCTYPE html>
 <html lang="EN">
-    <head>
-        <title>GC21 Data Visualization With WebGL</title>
-        <meta charset="UTF-8"/>
-        <meta name="viewport" content="width=device-width, initial-scale=1"/>
-        <link href="./asset/css/canvas.css" rel="stylesheet"/>
-    </head>
-    <body>
-        <canvas id="gl_canvas" width="800" height="800"></canvas>
-        <script type="x-shader/x-vertex" id="simple1.vert"> #version 300 es
-in vec3 vPosition;
-out vec3 vColor;
+
+<head>
+    <title>GC21 Data Visualization With WebGL</title>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link href="./asset/css/style.css" type="text/css" rel="stylesheet" />
+    <link href="./favicon.ico" rel="icon" type="image/x-icon" />
+    <!-- fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Readex+Pro:wght@200&display=swap" rel="stylesheet">
+</head>
+
+<body>
+    <canvas id="gl_canvas"></canvas>
+    <div id="box">
+        <div id="boxinner"></div>
+    </div>
+    <button id="btn-refresh" onclick="location.reload()">Refresh</button>
+    <script type="x-shader/x-vertex" id="earth.vert">#version 300 es
+layout(location = 0) in vec3 vPosition;
+layout(location = 1) in vec2 vinTexturecoord;
+layout(location = 2) in vec2 vinCloudTexturecoord;
+layout(location = 3) in vec3 vinTextureNormal;
+uniform mat4 uProjectionMatrix;
+uniform mat4 uViewMatrix;
+uniform mat4 uWorldMatrix;
+out vec2 voutTexturecoord;
+out vec2 voutCloudTexturecoord;
+out vec3 voutTextureNormal;
+out vec3 voutPosition;
 void main(void) {
-    gl_Position = vec4(vPosition, 1.0);
-    gl_PointSize = 3.0;
-    vColor = vPosition;
+    mat4 MVP = uProjectionMatrix * uViewMatrix * uWorldMatrix;
+    gl_Position =  MVP * vec4(vPosition, 1.0);
+    voutTexturecoord = vinTexturecoord;
+    voutCloudTexturecoord = vinCloudTexturecoord;
+    voutTextureNormal = vinTextureNormal;
+    voutPosition = vec3(uWorldMatrix * vec4(vPosition, 1.0));
  }
         </script>
-        <script type="x-shader/x-fragment" id="simple1.frag"> #version 300 es
-precision mediump float;
-in vec3 vColor;
+    <script type="x-shader/x-fragment" id="earth.frag">#version 300 es
+#ifdef GL_FRAGMENT_PRECISION_HIGH
+    precision highp float;
+#else
+    precision mediump float;
+#endif
+
+#define PI 3.141592
+#define iSteps 16
+#define jSteps 8
+
+in vec2 voutTexturecoord;
+in vec2 voutCloudTexturecoord;
+in vec3 voutTextureNormal;
+in vec3 voutPosition;
+uniform sampler2D uDayTexture;
+uniform sampler2D uNightTexture;
+uniform sampler2D uCloudTexture;
+uniform vec3 uLightDir;
 out vec4 Color;
-void main(void) {
-    Color = vec4(vColor, 1.0);
-}        
-        </script>
-        <script type="x-shader/x-fragment" id="flight.fs"> #version 300 es
-precision mediump float;
-uniform sampler2D texture;
-out vec4 Color;
-void main(void) {
-    Color = texture2D(texture, gl_PointCoord);
+
+vec2 rsi(vec3 r0, vec3 rd, float sr) {
+    // ray-sphere intersection that assumes
+    // the sphere is centered at the origin.
+    // No intersection when result.x > result.y
+    float a = dot(rd, rd);
+    float b = 2.0 * dot(rd, r0);
+    float c = dot(r0, r0) - (sr * sr);
+    float d = (b*b) - 4.0*a*c;
+    if (d < 0.0) return vec2(1e5,-1e5);
+    return vec2(
+        (-b - sqrt(d))/(2.0*a),
+        (-b + sqrt(d))/(2.0*a)
+    );
 }
-        </script>
-        <script src="./asset/js/main.js" type="module"></script>
-    </body>
+
+vec3 atmosphere(vec3 r, vec3 r0, vec3 pSun, float iSun, float rPlanet, float rAtmos, vec3 kRlh, float kMie, float shRlh, float shMie, float g) {
+    // Normalize the sun and view directions.
+    pSun = normalize(pSun);
+    r = normalize(r);
+
+    // Calculate the step size of the primary ray.
+    vec2 p = rsi(r0, r, rAtmos);
+    if (p.x > p.y) return vec3(0,0,0);
+    p.y = min(p.y, rsi(r0, r, rPlanet).x);
+    float iStepSize = (p.y - p.x) / float(iSteps);
+
+    // Initialize the primary ray time.
+    float iTime = 0.0;
+
+    // Initialize accumulators for Rayleigh and Mie scattering.
+    vec3 totalRlh = vec3(0,0,0);
+    vec3 totalMie = vec3(0,0,0);
+
+    // Initialize optical depth accumulators for the primary ray.
+    float iOdRlh = 0.0;
+    float iOdMie = 0.0;
+
+    // Calculate the Rayleigh and Mie phases.
+    float mu = dot(r, pSun);
+    float mumu = mu * mu;
+    float gg = g * g;
+    float pRlh = 3.0 / (16.0 * PI) * (1.0 + mumu);
+    float pMie = 3.0 / (8.0 * PI) * ((1.0 - gg) * (mumu + 1.0)) / (pow(1.0 + gg - 2.0 * mu * g, 1.5) * (2.0 + gg));
+
+    // Sample the primary ray.
+    for (int i = 0; i < iSteps; i++) {
+
+        // Calculate the primary ray sample position.
+        vec3 iPos = r0 + r * (iTime + iStepSize * 0.5);
+
+        // Calculate the height of the sample.
+        float iHeight = length(iPos) - rPlanet;
+
+        // Calculate the optical depth of the Rayleigh and Mie scattering for this step.
+        float odStepRlh = exp(-iHeight / shRlh) * iStepSize;
+        float odStepMie = exp(-iHeight / shMie) * iStepSize;
+
+        // Accumulate optical depth.
+        iOdRlh += odStepRlh;
+        iOdMie += odStepMie;
+
+        // Calculate the step size of the secondary ray.
+        float jStepSize = rsi(iPos, pSun, rAtmos).y / float(jSteps);
+
+        // Initialize the secondary ray time.
+        float jTime = 0.0;
+
+        // Initialize optical depth accumulators for the secondary ray.
+        float jOdRlh = 0.0;
+        float jOdMie = 0.0;
+
+        // Sample the secondary ray.
+        for (int j = 0; j < jSteps; j++) {
+
+            // Calculate the secondary ray sample position.
+            vec3 jPos = iPos + pSun * (jTime + jStepSize * 0.5);
+
+            // Calculate the height of the sample.
+            float jHeight = length(jPos) - rPlanet;
+
+            // Accumulate the optical depth.
+            jOdRlh += exp(-jHeight / shRlh) * jStepSize;
+            jOdMie += exp(-jHeight / shMie) * jStepSize;
+
+            // Increment the secondary ray time.
+            jTime += jStepSize;
+        }
+
+        // Calculate attenuation.
+        vec3 attn = exp(-(kMie * (iOdMie + jOdMie) + kRlh * (iOdRlh + jOdRlh)));
+
+        // Accumulate scattering.
+        totalRlh += odStepRlh * attn;
+        totalMie += odStepMie * attn;
+
+        // Increment the primary ray time.
+        iTime += iStepSize;
+
+    }
+
+    // Calculate and return the final color.
+    return iSun * (pRlh * kRlh * totalRlh + pMie * kMie * totalMie);
+}
+
+void main(void) {
+    const float dffborder = 0.5;
+    vec3 day = texture(uDayTexture, voutTexturecoord).rgb;
+    vec3 night = texture(uNightTexture, voutTexturecoord).rgb;
+    vec4 cloud = texture(uCloudTexture, voutCloudTexturecoord).rgba;
+    float shade = max(0.0, dot(voutTextureNormal, uLightDir) + dffborder);
+    
+    //we 
+    vec3 pos = normalize(voutPosition);
+    vec3 eye = vec3(0, -4, 0);
+    vec3 light = vec3(0, -5, 0);
+
+    vec3 scatter = vec3(0.0, 0.0, 0.0);
+    scatter = atmosphere(pos-eye, pos*6372e3, light, 22.0, 6371e3, 6471e3, vec3(5.5e-6, 13.0e-6, 22.4e-6), 21e-6, 8e3, 1.5e3, 0.758);
+
+    scatter = 1.0 - exp(-0.5 * scatter);
+    Color = vec4(day - shade, 1.0);
+    if (shade >= dffborder) {
+        if (night.r > night.b) {
+            Color = vec4(night, 1.0);
+        }
+    }
+
+    if (cloud.a >= 1.0) {
+        Color = cloud;
+    }
+    Color = vec4(min(scatter.r, Color.r),min(scatter.g, Color.g),min(scatter.b, Color.b), 1.0) + Color;
+    Color = vec4(scatter, 1.0) + Color;
+}
+    </script>
+    <script type="x-shader/x-vertex" id="flight.vert">#version 300 es
+layout(location = 4) in vec3 vPosition;
+uniform mat4 uProjectionMatrix;
+uniform mat4 uViewMatrix;
+uniform mat4 uWorldMatrix;
+void main(void) {
+    gl_Position = uProjectionMatrix * uViewMatrix * uWorldMatrix * vec4(vPosition, 1.0);
+    gl_PointSize = 3.0;
+}
+    </script>
+    <script type="x-shader/x-fragment" id="flight.frag">#version 300 es
+#ifdef GL_FRAGMENT_PRECISION_HIGH
+    precision highp float;
+#else
+    precision mediump float;
+#endif
+out vec4 Color;
+void main(void) {
+    Color = vec4(1.0, 0.0, 0.0, 1.0);
+}
+    </script>
+    <script type="x-shader/x-vertex" id="pick.vert">#version 300 es
+layout(location = 5) in vec3 vPosition;
+layout(location = 6) in vec4 vinColor; //picker infomation
+uniform mat4 uProjectionMatrix;
+uniform mat4 uViewMatrix;
+uniform mat4 uWorldMatrix;
+out vec4 voutColor;
+void main(void) {
+    gl_Position = uProjectionMatrix * uViewMatrix * uWorldMatrix * vec4(vPosition, 1.0);
+    gl_PointSize = 3.0;
+    voutColor = vinColor;
+}
+    </script>
+    <script type="x-shader/x-fragment" id="pick.frag">#version 300 es
+#ifdef GL_FRAGMENT_PRECISION_HIGH
+    precision highp float;
+#else
+    precision mediump float;
+#endif
+in vec4 voutColor; //picker information
+out vec4 Color;
+
+void main(void) {
+    Color = voutColor;
+}
+    </script>
+    <script src="./asset/js/main.js" type="module"></script>
+</body>
 </html>

@@ -1,60 +1,107 @@
 export class Earth {
-    static get vertice() {
-        if (!this.isInitialized)
-            throw Error("Mesh is not initialized.");
-        return Earth._vertice;
+    constructor(radius, stacks, sectors) {
+        this._vertex = [];
+        this._normal = [];
+        this._texcoord = [];
+        this._mercatorTexcoord = [];
+        this._index = [];
+        this.create(radius, stacks, sectors);
     }
-    static get normal() {
-        if (!this.isInitialized)
-            throw Error("Mesh is not initialized.");
-        return Earth._normal;
+    get vertex() {
+        return this._vertex;
     }
-    static get texcoord() {
-        if (!this.isInitialized)
-            throw Error("Mesh is not initialized.");
-        return Earth._texcoord;
+    get normal() {
+        return this._normal;
     }
-    static get index() {
-        if (!this.isInitialized)
-            throw Error("Mesh is not initialized.");
-        return Earth._index;
+    get texcoord() {
+        return this._texcoord;
     }
-    static create(radius, precision) {
-        for (let i = 0; i < precision; i++) {
-            let phi1 = i * Math.PI * 2 / precision;
-            let phi2 = (i + 1) * Math.PI * 2 / precision;
-            let x = 0, y = 0, z = 0;
-            let nx = 0, ny = 0, nz = 0;
-            let u = 0, v = 0;
-            for (let j = 0; j <= precision; j++) {
-                let theta = j * Math.PI / precision;
-                nx = Math.sin(theta) * Math.cos(phi2);
-                ny = Math.sin(theta) * Math.sin(phi2);
-                nz = Math.cos(theta);
+    get mercatorTexcoord() {
+        return this._mercatorTexcoord;
+    }
+    get index() {
+        return this._index;
+    }
+    create(radius, stacks, sectors) {
+        let phi, theta;
+        let x, y, z;
+        let nx, ny, nz;
+        let u, v, mu, mv;
+        let stack_step = Math.PI / stacks;
+        let slice_step = 2 * Math.PI / sectors;
+        for (let i = 0; i <= stacks; ++i) {
+            phi = (Math.PI / 2) - stack_step * i;
+            for (let j = 0; j <= sectors; ++j) {
+                theta = j * slice_step;
+                nx = Math.cos(phi) * Math.cos(theta);
+                ny = Math.cos(phi) * Math.sin(theta);
+                nz = Math.sin(phi);
                 x = radius * nx;
                 y = radius * ny;
                 z = radius * nz;
-                this._vertice.push(x, y, z);
+                this._vertex.push(x, y, z);
                 this._normal.push(nx, ny, nz);
-                nx = Math.sin(theta) * Math.cos(phi1);
-                ny = Math.sin(theta) * Math.sin(phi1);
-                nz = Math.cos(theta);
-                x = radius * nx;
-                y = radius * ny;
-                z = radius * nz;
-                this._vertice.push(x, y, z);
-                this._normal.push(nx, ny, nz);
-                u = phi1 / 2 * Math.PI;
-                v = 1 - theta / Math.PI;
+                u = j / sectors;
+                v = i / stacks;
                 this._texcoord.push(u, v);
+                mu = u;
+                mv = ((Math.log(Math.tan(Math.PI / 4.0 + (v - 0.5) * Math.PI / 2.0))) + Math.PI) / (2 * Math.PI);
+                this._mercatorTexcoord.push(mu, mv);
             }
         }
-        this.isInitialized = true;
+        this.createIndex(stacks, sectors);
+    }
+    createIndex(stacks, sectors) {
+        let k1, k2;
+        for (let i = 0; i < stacks; i++) {
+            k1 = i * (sectors + 1);
+            k2 = k1 + sectors + 1;
+            for (let j = 0; j < sectors; j++) {
+                if (i != 0) {
+                    this._index.push(k1, k2, k1 + 1);
+                }
+                if (i != (stacks - 1)) {
+                    this._index.push(k1 + 1, k2, k2 + 1);
+                }
+                k1++;
+                k2++;
+            }
+        }
+    }
+    static pointAt(radius, lat, lon) {
+        let ret = [];
+        lat += 180;
+        let latRad = lat * (Math.PI / 180);
+        let lonRad = lon * (Math.PI / 180);
+        let x = Math.cos(latRad) * Math.cos(lonRad) * radius;
+        let y = Math.cos(lonRad) * Math.sin(latRad) * radius;
+        let z = Math.sin(lonRad) * radius;
+        ret.push(x, y, z);
+        return ret;
+    }
+    static lightPos(lat) {
+        let ret = [];
+        lat += 180;
+        let latRad = lat * (Math.PI / 180);
+        let x = Math.cos(latRad);
+        let y = Math.sin(latRad);
+        let z = 0;
+        ret.push(x, y, z);
+        return ret;
+    }
+    static lightPosTime(epoch) {
+        let date;
+        if (epoch > 0) {
+            date = new Date(epoch);
+        }
+        else {
+            date = new Date();
+        }
+        let h = date.getUTCHours();
+        let min = date.getUTCMinutes();
+        let sec = date.getUTCSeconds();
+        let degree = h * 15.0 + min * 0.25 + sec * 0.00417;
+        return this.lightPos(-degree);
     }
 }
-Earth._vertice = [];
-Earth._normal = [];
-Earth._texcoord = [];
-Earth._index = [];
-Earth.isInitialized = false;
 //# sourceMappingURL=Earth.js.map
